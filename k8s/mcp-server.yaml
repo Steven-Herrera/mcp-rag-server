@@ -1,0 +1,196 @@
+# Qdrant StatefulSet + MCP RAG Server Deployment
+# Namespace: mcp
+#
+# Deploy with:
+#   kubectl apply -f k8s/mcp-server.yaml
+
+---
+# 1. Qdrant StatefulSet — single-replica vector database
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant
+  namespace: mcp
+  labels:
+    app: qdrant
+spec:
+  serviceName: qdrant
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qdrant
+  template:
+    metadata:
+      labels:
+        app: qdrant
+    spec:
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:v1.13.2
+          ports:
+            - containerPort: 6333
+              name: http
+            - containerPort: 6334
+              name: grpc
+          volumeMounts:
+            - name: qdrant-data
+              mountPath: /qdrant/storage
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 6333
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 6333
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: qdrant-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 2Gi
+
+---
+# 2. Qdrant Service — ClusterIP for internal access
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  namespace: mcp
+  labels:
+    app: qdrant
+spec:
+  type: ClusterIP
+  selector:
+    app: qdrant
+  ports:
+    - name: http
+      port: 6333
+      targetPort: 6333
+    - name: grpc
+      port: 6334
+      targetPort: 6334
+
+---
+# 3. MCP RAG Server ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-server-config
+  namespace: mcp
+data:
+  MCP_RAG_APP_NAME: "mcp-rag-server"
+  MCP_RAG_HOST: "0.0.0.0"
+  MCP_RAG_PORT: "9000"
+  MCP_RAG_MCP_PATH: "/mcp"
+  MCP_RAG_QDRANT_URL: "http://qdrant.mcp.svc.cluster.local:6333"
+  MCP_RAG_COLLECTION_NAME: "documents"
+  MCP_RAG_EMBEDDING_MODEL: "sentence-transformers/all-MiniLM-L6-v2"
+  MCP_RAG_EMBEDDING_DIMENSION: "384"
+  MCP_RAG_CHUNK_SIZE: "1000"
+  MCP_RAG_CHUNK_OVERLAP: "200"
+  MCP_RAG_TOP_K: "5"
+  MCP_RAG_LOG_LEVEL: "INFO"
+
+---
+# 4. MCP RAG Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server
+  namespace: mcp
+  labels:
+    app: mcp-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mcp-server
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: mcp-server
+          # Update tag after first CI build
+          image: ghcr.io/steven-herrera/mcp-rag-server:v0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: mcp-server-config
+          livenessProbe:
+            httpGet:
+              path: /api/healthz
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: 9000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 1Gi
+
+---
+# 5. MCP Server Service — this is what edge-gw-auth proxies to
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server
+  namespace: mcp
+  labels:
+    app: mcp-server
+spec:
+  type: ClusterIP
+  selector:
+    app: mcp-server
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 9000
+
+---
+# 6. MCP Server NodePort — for direct testing
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server-nodeport
+  namespace: mcp
+  labels:
+    app: mcp-server
+spec:
+  type: NodePort
+  selector:
+    app: mcp-server
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 9000
+      nodePort: 30900
