@@ -26,23 +26,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from mcp_server.chunking import chunk_text
+from mcp_server.deps import get_store
 from mcp_server.parsers import parse_file
-from mcp_server.vectorstore import VectorStore
-
-_store: VectorStore | None = None
-
-
-def _get_store() -> VectorStore:
-    """Return the singleton VectorStore if it is not yet instantiated
-
-    Returns:
-        _store: VectorStore instance
-    """
-    global _store  # noqa: PLW0603
-    if _store is None:
-        _store = VectorStore()
-        _store.ensure_collection()
-    return _store
 
 
 async def handle_ingest(request: Request) -> JSONResponse:
@@ -84,7 +69,7 @@ async def handle_ingest(request: Request) -> JSONResponse:
         metadata["original_filename"] = upload.filename or "unknown"
 
         chunks = chunk_text(text, source=source, metadata=metadata)
-        store = _get_store()
+        store = get_store()
         count = store.ingest_chunks(chunks)
         logger.info("HTTP ingest: {} chunks from '{}'", count, source)
 
@@ -99,7 +84,7 @@ async def handle_ingest(request: Request) -> JSONResponse:
         tmp_path.unlink(missing_ok=True)
 
 
-async def handle_health(request: Request) -> JSONResponse:
+async def handle_health(request: Request) -> JSONResponse:  # pylint: disable=unused-argument
     """Health check verifying Qdrant connectivity and embedding model.
 
     Starlette requires request as the first argument, but it's not
@@ -115,18 +100,20 @@ async def handle_health(request: Request) -> JSONResponse:
     health: dict[str, str] = {}
 
     try:
-        store = _get_store()
+        store = get_store()
         info = store.collection_info()
         health["qdrant"] = f"ok ({info.points_count} points)"
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         health["qdrant"] = f"error: {exc}"
 
     try:
-        from mcp_server.embeddings import embed_query as _eq  # noqa: PLC0415
+        from mcp_server.embeddings import (  # pylint: disable=import-outside-toplevel
+            embed_query as _eq,
+        )
 
         vec = _eq("health check")
         health["embedding_model"] = f"ok (dim={len(vec)})"
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         health["embedding_model"] = f"error: {exc}"
 
     all_ok = all(v.startswith("ok") for v in health.values())

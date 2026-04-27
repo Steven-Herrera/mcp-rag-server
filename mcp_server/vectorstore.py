@@ -28,7 +28,7 @@ class SearchResult(BaseModel):
     Attributes:
         text: The matched chunk text.
         source: Source file path or identifier.
-        score: Cosine similarity score (0.0–1.0).
+        score: Cosine similarity score (0.0-1.0).
         chunk_index: Position of this chunk within the source document.
         metadata: Any additional payload fields from the chunk.
     """

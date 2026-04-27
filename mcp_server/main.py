@@ -86,7 +86,7 @@ def main() -> None:
         settings.port,
     )
 
-    app = mcp.streamable_http_app(path=settings.mcp_path)
+    app = mcp.streamable_http_app()
     app.mount("/api", ingest_app)
 
     uvicorn.run(

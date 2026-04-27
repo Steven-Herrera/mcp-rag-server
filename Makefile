@@ -43,7 +43,7 @@ docker-push:
 docker-lint:
 	docker run --rm -i $(HADOLINT_IMAGE) < $(DOCKERFILE)
 
-ci: install fmt-check lint test docker-lint ## Run full CI pipeline
+ci: install fmt-check lint test docker-lint
 
 clean: ## Remove caches and build artifacts
 	rm -rf .ruff_cache .pytest_cache .mypy_cache dist __pycache__

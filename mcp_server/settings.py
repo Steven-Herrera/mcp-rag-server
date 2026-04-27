@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MCP_RAG_", case_sensitive=False)
 
     app_name: str = "mcp-rag-server"
-    host: str = "0.0.0.0"  # noqa: S104
+    host: str = "0.0.0.0"
     port: int = 9000
     mcp_path: str = "/mcp"
 
