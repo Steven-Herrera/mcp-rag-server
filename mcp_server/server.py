@@ -21,6 +21,8 @@ mcp = FastMCP(
     settings.app_name,
     stateless_http=True,
     json_response=True,
+    host=settings.host,
+    port=settings.port,
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=False,
     ),
