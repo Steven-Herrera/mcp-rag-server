@@ -27,16 +27,18 @@ def parse_pdf(path: Path) -> tuple[str, dict[str, str]]:
     Returns:
         payload: Tuple of (full_text, metadata)
     """
-
     doc = pymupdf.open(str(path))
+    page_count = len(doc)
     pages: list[str] = []
     for page in doc:
-        pages.append(page.get_text())
+        text = page.get_text()
+        if text.strip():
+            pages.append(text)
+        page.reset_usage()
     doc.close()
 
-    metadata = {"type": "pdf", "pages": str(len(pages))}
-    payload = "\n\n".join(pages), metadata
-    return payload
+    metadata = {"type": "pdf", "pages": str(page_count)}
+    return "\n\n".join(pages), metadata
 
 
 def parse_text(path: Path) -> tuple[str, dict[str, str]]:
