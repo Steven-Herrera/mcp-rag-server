@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.6,<3",
     "pymupdf>=1.25,<2",
     "uvicorn[standard]>=0.32,<1",
+    "fastapi>=0.136.1",
 ]
 
 [project.optional-dependencies]

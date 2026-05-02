@@ -18,6 +18,7 @@ import logging
 import sys
 
 import uvicorn
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from loguru import logger
 
 from mcp_server.server import mcp
@@ -87,6 +88,12 @@ def main() -> None:
     )
 
     app = mcp.streamable_http_app()
+
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=["*"],
+    )
+
     app.mount("/api", ingest_app)
 
     uvicorn.run(
@@ -94,6 +101,8 @@ def main() -> None:
         host=settings.host,
         port=settings.port,
         log_level="info",
+        proxy_headers=True,
+        forwarded_allow_ips="*",
     )
 
 
