@@ -224,7 +224,7 @@ def ingest_path(
             meta: dict[str, str] = {"path": str(file_path)}
             if file_path.parent != Path("."):
                 meta["directory"] = str(file_path.parent)
-            total += _ingest_pdf_streaming(file_path, store, source, meta)
+            total += _ingest_pdf_streaming(file_path, store, source, meta, batch_size=20)
         else:
             total += _ingest_non_pdf(file_path, path, store, source_prefix)
 

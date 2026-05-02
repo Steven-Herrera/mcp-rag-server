@@ -79,7 +79,7 @@ class VectorStore:
         self._url = url or settings.qdrant_url
         self._api_key = api_key or settings.qdrant_api_key
         self._collection = collection_name or settings.collection_name
-        self._client = QdrantClient(url=self._url, api_key=self._api_key)
+        self._client = QdrantClient(url=self._url, api_key=self._api_key, timeout=120)
 
     def ensure_collection(self) -> None:
         """Create the collection if it does not already exist."""
