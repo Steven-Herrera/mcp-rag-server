@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from mcp_server.deps import get_store
 from mcp_server.settings import settings
@@ -20,7 +21,9 @@ mcp = FastMCP(
     settings.app_name,
     stateless_http=True,
     json_response=True,
-    allowed_hosts=["*"],
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    ),
 )
 
 
