@@ -16,7 +16,12 @@ from mcp.server.fastmcp import FastMCP
 from mcp_server.deps import get_store
 from mcp_server.settings import settings
 
-mcp = FastMCP(settings.app_name, stateless_http=True, json_response=True)
+mcp = FastMCP(
+    settings.app_name,
+    stateless_http=True,
+    json_response=True,
+    allowed_hosts=["*"],
+)
 
 
 @mcp.tool()
