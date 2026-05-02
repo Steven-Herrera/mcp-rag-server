@@ -3,7 +3,7 @@
 UV              := uv
 REGISTRY        ?= ghcr.io/steven-herrera
 IMAGE_NAME      ?= mcp-rag-server
-VERSION         ?= v0.1.1
+VERSION         ?= v0.1.2
 IMAGE           := $(REGISTRY)/$(IMAGE_NAME):$(VERSION)
 DOCKERFILE      ?= Dockerfile
 DOCKER_CONTEXT  ?= .

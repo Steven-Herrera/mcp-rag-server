@@ -20,6 +20,8 @@ import sys
 import uvicorn
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from loguru import logger
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
 
 from mcp_server.server import mcp
 from mcp_server.settings import settings
@@ -87,13 +89,10 @@ def main() -> None:
         settings.port,
     )
 
-    app = mcp.streamable_http_app()
+    mcp_app = mcp.streamable_http_app()
 
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=["*"],
-    )
-
+    app = Starlette(middleware=[Middleware(TrustedHostMiddleware, allowed_hosts=["*"])])
+    app.mount("/", mcp_app)
     app.mount("/api", ingest_app)
 
     uvicorn.run(
