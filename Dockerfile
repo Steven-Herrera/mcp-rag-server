@@ -13,20 +13,21 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 RUN useradd --create-home appuser \
     && chown appuser:appuser /app
 
-USER appuser
-
 COPY --chown=appuser:appuser pyproject.toml uv.lock ./
+
+# Runs as root so uv can write to the venv.
 RUN uv sync --frozen --no-dev --no-editable \
     && rm -rf ~/.cache/uv
 
-COPY --chown=appuser:appuser mcp_server/ mcp_server/
+# Pre-download model weights only — snapshot_download is faster than
+# instantiating the full SentenceTransformer (no warmup pass).
+RUN /app/.venv/bin/python -c "from huggingface_hub import snapshot_download; snapshot_download('sentence-transformers/all-MiniLM-L6-v2')"
 
-# Pre-download the embedding model at build time so startup is fast.
-RUN /app/.venv/bin/python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device='cpu')"
+USER appuser
+
+COPY --chown=appuser:appuser mcp_server/ mcp_server/
 
 EXPOSE 9000
 
-# tini runs as PID 1 so it can forward signals (SIGTERM) to the app and reap zombie processes.
-# Without it, Python as PID 1 may not shut down cleanly when Kubernetes stops the pod.
 ENTRYPOINT ["tini", "--"]
 CMD ["/app/.venv/bin/python", "-m", "mcp_server.main"]
