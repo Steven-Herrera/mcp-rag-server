@@ -77,7 +77,7 @@ def _resolve_source(file_path: Path, base: Path, source_prefix: str | None) -> s
     return f"{source_prefix}/{relative}"
 
 
-def _flush_batch(
+def _flush_batch(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     batch: list[str],
     store: VectorStore,
     source: str,
