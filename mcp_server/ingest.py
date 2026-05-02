@@ -12,6 +12,10 @@ Usage:
 
 Functions:
     _discover_files: Filters out irrelevant files from directory
+    _resolve_source: Resolves the source label for a file
+    _ingest_pdf_streaming: Ingests a PDF in page batches to avoid OOM
+    _flush_batch: Chunks and upserts a batch of pages
+    _ingest_non_pdf: Ingests a non-PDF file
     ingest_path: Embeds and stores documents
     main: Entrypoint for document ingestion
 """
@@ -31,9 +35,9 @@ from mcp_server.vectorstore import VectorStore
 
 
 def _discover_files(root: Path) -> list[Path]:
-    """Recursively discover ingestible files under root
+    """Recursively discover ingestible files under root.
 
-    Skips hidden directories, (e.g. __pycache__, .git, node_modules, .venv)
+    Skips hidden directories.
 
     Args:
         root: Root directory to scan.
@@ -53,87 +57,67 @@ def _discover_files(root: Path) -> list[Path]:
     return files
 
 
-def ingest_path(
-    path: Path,
-    store: VectorStore,
-    *,
-    source_prefix: str | None = None,
-) -> int:
-    """Ingest a file or directory into the vector store.
+def _resolve_source(file_path: Path, base: Path, source_prefix: str | None) -> str:
+    """Resolve the source label for a file.
 
     Args:
-        path: File or directory to ingest.
-        store: Vector store to upsert into.
-        source_prefix: Optional prefix to prepend to source paths.
+        file_path: Path to the file.
+        base: Base directory used for relative path resolution.
+        source_prefix: Optional prefix to prepend.
 
     Returns:
-        total: Number of chunks ingested
-
-    Raises:
-        NotADirectoryError: Path doesn't exist
+        source: Source label string.
     """
-    if path.is_file():
-        files = [path]
-    elif path.is_dir():
-        files = _discover_files(path)
-    else:
-        logger.error("Path does not exist: {}", path)
-        raise NotADirectoryError(f"{path} does not exist")
+    if not source_prefix:
+        return str(file_path)
+    try:
+        relative = file_path.relative_to(base)
+    except ValueError:
+        relative = file_path
+    return f"{source_prefix}/{relative}"
 
-    total = 0
-    for file_path in files:
-        suffix = file_path.suffix.lower()
 
-        # Stream large PDFs page-by-page to avoid OOM
-        if suffix == ".pdf":
-            source = str(file_path)
-            if source_prefix:
-                try:
-                    relative = file_path.relative_to(path)
-                except ValueError:
-                    relative = file_path
-                source = f"{source_prefix}/{relative}"
-            meta: dict[str, str] = {"path": str(file_path)}
-            if file_path.parent != Path("."):
-                meta["directory"] = str(file_path.parent)
-            count = _ingest_pdf_streaming(file_path, store, source, meta)
-            total += count
-            continue
+def _flush_batch(
+    batch: list[str],
+    store: VectorStore,
+    source: str,
+    metadata: dict[str, str],
+    page_end: int,
+    page_count: int,
+) -> int:
+    """Chunk and upsert a batch of page texts.
 
-        result = parse_file(file_path)
-        if result is None:
-            continue
+    Args:
+        batch: List of page text strings.
+        store: Vector store to upsert into.
+        source: Source label for chunks.
+        metadata: Base metadata dict.
+        page_end: Index of the last page in the batch (0-based).
+        page_count: Total pages in the document.
 
-        text, metadata = result
-        if not text.strip():
-            logger.warning("Empty content: {}", file_path)
-            continue
-
-        source = str(file_path)
-        if source_prefix:
-            try:
-                relative = file_path.relative_to(path)
-            except ValueError:
-                relative = file_path
-            source = f"{source_prefix}/{relative}"
-
-        metadata["path"] = str(file_path)
-        if file_path.parent != Path("."):
-            metadata["directory"] = str(file_path.parent)
-
-        chunks = chunk_text(text, source=source, metadata=metadata)
-        count = store.ingest_chunks(chunks)
-        total += count
-        logger.info("Ingested {} chunks from {}", count, source)
-
-    return total
+    Returns:
+        count: Number of chunks ingested.
+    """
+    batch_text = "\n\n".join(batch)
+    batch_meta = {**metadata, "pages": str(page_count)}
+    chunks = chunk_text(batch_text, source=source, metadata=batch_meta)
+    count = store.ingest_chunks(chunks)
+    page_start = page_end - len(batch) + 2
+    logger.info(
+        "Ingested {} chunks from {} (pages {}-{})",
+        count,
+        source,
+        page_start,
+        page_end + 1,
+    )
+    return count
 
 
 def _ingest_pdf_streaming(
     file_path: Path,
     store: VectorStore,
     source: str,
-    metadata: dict,
+    metadata: dict[str, str],
     *,
     batch_size: int = 50,
 ) -> int:
@@ -149,7 +133,6 @@ def _ingest_pdf_streaming(
     Returns:
         total: Total chunks ingested.
     """
-
     doc = pymupdf.open(str(file_path))
     page_count = len(doc)
     total = 0
@@ -162,21 +145,88 @@ def _ingest_pdf_streaming(
             batch.append(text)
 
         if (len(batch) >= batch_size or i == page_count - 1) and batch:
-            batch_text = "\n\n".join(batch)
-            batch_meta = {**metadata, "pages": str(page_count)}
-            chunks = chunk_text(batch_text, source=source, metadata=batch_meta)
-            count = store.ingest_chunks(chunks)
-            total += count
-            logger.info(
-                "Ingested {} chunks from {} (pages {}-{})",
-                count,
-                source,
-                i - len(batch) + 2,
-                i + 1,
-            )
+            total += _flush_batch(batch, store, source, metadata, i, page_count)
             batch.clear()
 
     doc.close()
+    return total
+
+
+def _ingest_non_pdf(
+    file_path: Path,
+    base: Path,
+    store: VectorStore,
+    source_prefix: str | None,
+) -> int:
+    """Ingest a single non-PDF file into the vector store.
+
+    Args:
+        file_path: Path to the file.
+        base: Base directory for relative path resolution.
+        store: Vector store to upsert into.
+        source_prefix: Optional prefix to prepend to source paths.
+
+    Returns:
+        count: Number of chunks ingested, or 0 if skipped.
+    """
+    result = parse_file(file_path)
+    if result is None:
+        return 0
+
+    text, metadata = result
+    if not text.strip():
+        logger.warning("Empty content: {}", file_path)
+        return 0
+
+    source = _resolve_source(file_path, base, source_prefix)
+    metadata["path"] = str(file_path)
+    if file_path.parent != Path("."):
+        metadata["directory"] = str(file_path.parent)
+
+    chunks = chunk_text(text, source=source, metadata=metadata)
+    count = store.ingest_chunks(chunks)
+    logger.info("Ingested {} chunks from {}", count, source)
+    return count
+
+
+def ingest_path(
+    path: Path,
+    store: VectorStore,
+    *,
+    source_prefix: str | None = None,
+) -> int:
+    """Ingest a file or directory into the vector store.
+
+    Args:
+        path: File or directory to ingest.
+        store: Vector store to upsert into.
+        source_prefix: Optional prefix to prepend to source paths.
+
+    Returns:
+        total: Number of chunks ingested.
+
+    Raises:
+        NotADirectoryError: Path doesn't exist.
+    """
+    if path.is_file():
+        files = [path]
+    elif path.is_dir():
+        files = _discover_files(path)
+    else:
+        logger.error("Path does not exist: {}", path)
+        raise NotADirectoryError(f"{path} does not exist")
+
+    total = 0
+    for file_path in files:
+        if file_path.suffix.lower() == ".pdf":
+            source = _resolve_source(file_path, path, source_prefix)
+            meta: dict[str, str] = {"path": str(file_path)}
+            if file_path.parent != Path("."):
+                meta["directory"] = str(file_path.parent)
+            total += _ingest_pdf_streaming(file_path, store, source, meta)
+        else:
+            total += _ingest_non_pdf(file_path, path, store, source_prefix)
+
     return total
 
 
