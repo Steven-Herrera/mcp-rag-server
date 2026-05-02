@@ -140,13 +140,14 @@ def _ingest_pdf_streaming(
 
     for i, page in enumerate(doc):
         text = page.get_text()
-        page.reset_usage()
+        page = None
         if text.strip():
             batch.append(text)
 
         if (len(batch) >= batch_size or i == page_count - 1) and batch:
             total += _flush_batch(batch, store, source, metadata, i, page_count)
             batch.clear()
+            pymupdf.TOOLS.store_shrink(100)
 
     doc.close()
     return total
