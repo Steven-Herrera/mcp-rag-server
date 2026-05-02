@@ -19,6 +19,15 @@ from loguru import logger
 
 
 def parse_pdf(path: Path) -> tuple[str, dict[str, str]]:
+    """
+    Uses the PDF path to extract the text from a PDF file. Also adds metadata
+
+    Args:
+        path: Filepath to PDF to parse
+
+    Returns:
+        payload: Tuple of (full_text, metadata)
+    """
     doc = pymupdf.open(str(path))
     page_count = len(doc)
     pages = []
