@@ -19,22 +19,13 @@ from loguru import logger
 
 
 def parse_pdf(path: Path) -> tuple[str, dict[str, str]]:
-    """Extract text from a PDF using PyMuPDF.
-
-    Args:
-        path: Path to the PDF file.
-
-    Returns:
-        payload: Tuple of (full_text, metadata)
-    """
     doc = pymupdf.open(str(path))
     page_count = len(doc)
-    pages: list[str] = []
+    pages = []
     for page in doc:
         text = page.get_text()
         if text.strip():
             pages.append(text)
-        page.reset_usage()
     doc.close()
 
     metadata = {"type": "pdf", "pages": str(page_count)}
