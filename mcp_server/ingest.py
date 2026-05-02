@@ -161,21 +161,20 @@ def _ingest_pdf_streaming(
         if text.strip():
             batch.append(text)
 
-        if len(batch) >= batch_size or i == page_count - 1:
-            if batch:
-                batch_text = "\n\n".join(batch)
-                batch_meta = {**metadata, "pages": str(page_count)}
-                chunks = chunk_text(batch_text, source=source, metadata=batch_meta)
-                count = store.ingest_chunks(chunks)
-                total += count
-                logger.info(
-                    "Ingested {} chunks from {} (pages {}-{})",
-                    count,
-                    source,
-                    i - len(batch) + 2,
-                    i + 1,
-                )
-                batch.clear()
+        if (len(batch) >= batch_size or i == page_count - 1) and batch:
+            batch_text = "\n\n".join(batch)
+            batch_meta = {**metadata, "pages": str(page_count)}
+            chunks = chunk_text(batch_text, source=source, metadata=batch_meta)
+            count = store.ingest_chunks(chunks)
+            total += count
+            logger.info(
+                "Ingested {} chunks from {} (pages {}-{})",
+                count,
+                source,
+                i - len(batch) + 2,
+                i + 1,
+            )
+            batch.clear()
 
     doc.close()
     return total
