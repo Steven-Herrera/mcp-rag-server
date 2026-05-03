@@ -118,7 +118,7 @@ class VectorStore:
 
         points = [
             models.PointStruct(
-                id=str(uuid.uuid4()),
+                id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{chunk.source}:{chunk.chunk_index}")),
                 vector=vec,
                 payload={
                     "text": chunk.text,
