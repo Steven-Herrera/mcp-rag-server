@@ -69,7 +69,7 @@ Each k8s VM is provisioned with approximately 4 vCPU, 4 GiB RAM, and 70 GB disk.
 ### VLAN Design
 
 | VLAN | Purpose |
-|---|---|---|
+|---|---|
 | VLAN 10 | Proxmox cluster communication |
 | VLAN 20 | Kubernetes workload network |
 
